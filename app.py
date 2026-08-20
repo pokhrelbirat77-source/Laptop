@@ -17,7 +17,29 @@ st.set_page_config(
 def load_model():
     model_path = "best_laptop_model.pkl"
     if os.path.exists(model_path):
-        return joblib.load(model_path)
+        model_obj = joblib.load(model_path)
+        
+        # Patch SimpleImputer for scikit-learn version compatibility (fixes '_fill_dtype' errors)
+        def patch_imputer(obj):
+            from sklearn.impute import SimpleImputer
+            from sklearn.compose import ColumnTransformer
+            from sklearn.pipeline import Pipeline
+            from sklearn.compose import TransformedTargetRegressor
+
+            if isinstance(obj, SimpleImputer):
+                if not hasattr(obj, '_fill_dtype'):
+                    obj._fill_dtype = obj.statistics_.dtype
+            elif isinstance(obj, Pipeline):
+                for name, step in obj.steps:
+                    patch_imputer(step)
+            elif isinstance(obj, ColumnTransformer):
+                for name, transformer, columns in obj.transformers_:
+                    patch_imputer(transformer)
+            elif isinstance(obj, TransformedTargetRegressor):
+                patch_imputer(obj.regressor_)
+
+        patch_imputer(model_obj)
+        return model_obj
     else:
         st.error(f"Model file '{model_path}' not found! Please run the training notebook first to generate the model.")
         return None
